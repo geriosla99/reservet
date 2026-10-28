@@ -5,6 +5,24 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Base PostgreSQL desechable solo para las pruebas de integración.
+    # Estas credenciales son de un contenedor temporal, no de un ambiente real.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: reservet_candidate
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: reservet_candidate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reservet_candidate -d reservet_candidate_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://reservet_candidate:ci_only_password@localhost:5432/reservet_candidate_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
