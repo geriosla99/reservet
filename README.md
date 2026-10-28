@@ -246,11 +246,25 @@ que se publica. [COMPLETAR: confirma que esto coincide con lo ocurrido.]
 ## 12. Entrega
 
 ```text
-Repositorio: https://github.com/TU_USUARIO/reservet-prueba-tecnica
-Rama final y commit: [COMPLETAR]
-Pull request: [COMPLETAR]
-CI: [COMPLETAR: URL de una ejecución correcta]
+Repositorio: https://github.com/geriosla99/reservet/edit/feat/technical-test
+Rama final y commit: feat/technical-test docs: README de la solución y regresiones de defectos; corrige parámetros de scrypt
+Pull request: https://github.com/geriosla99/reservet/pull/1
+CI: https://github.com/geriosla99/reservet/actions/runs/40685099116
 Instrucciones de ejecución: secciones 2 y 11 de este README
 Usuario de prueba: procedimiento de seed (sección 2.4)
 Completado / pendiente: ver secciones 8 y 10
 ```
+
+### Problemas de entorno resueltos durante el trabajo (no son del código inicial)
+
+Durante la configuración local de PostgreSQL se presentaron varios problemas de conexión que se resolvieron antes de continuar con las pruebas de la aplicación.
+
+- **`psql` no se reconocía en PowerShell:** el comando no estaba disponible desde la terminal porque el ejecutable de PostgreSQL no estaba agregado al `PATH`. Se continuó la configuración utilizando pgAdmin y las herramientas del proyecto.
+- **`ECONNREFUSED`:** la aplicación intentaba conectarse a PostgreSQL en un puerto distinto al utilizado por la instalación local. Se verificó que PostgreSQL estaba escuchando en el puerto `5432` y se ajustó la configuración.
+- **`28P01` — autenticación fallida:** el archivo `.env` tenía configurado el rol `reservet`, que no existía en la instancia local. En pgAdmin se comprobó que el rol disponible era `reservet_candidate`; se configuró su contraseña y se alinearon las credenciales de conexión.
+- **Variables de entorno con prioridad sobre `.env`:** aunque se modificó el archivo, la aplicación continuaba utilizando valores anteriores porque `dotenv` no sobrescribe variables ya definidas en la sesión de PowerShell. Se revisaron las variables con `Get-ChildItem Env:DATABASE*` y se corrigió la configuración efectiva.
+- **Bases de datos de trabajo y pruebas:** se configuraron `reservet_candidate` y `reservet_candidate_test`, separando la base utilizada por la aplicación de la destinada a las pruebas de integración.
+
+Una vez corregida la configuración, `npm run db:migrate` se ejecutó correctamente. También se iniciaron el servidor y los endpoints de comprobación: `/health` respondió correctamente y `/health/db` confirmó la conexión con PostgreSQL.
+
+**Resultado:** la aplicación quedó conectada a PostgreSQL local, con las migraciones aplicadas y la base de pruebas configurada. Estos inconvenientes correspondieron al entorno local, no a defectos funcionales del código de la prueba.
