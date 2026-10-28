@@ -189,11 +189,19 @@ function render() {
   }
 }
 
+function updateAuthAction() {
+  // En modo demostración ofrece acceso al login; con sesión activa permite salir.
+  // El botón no se muestra mientras el formulario de login ya está visible.
+  $('#logout').hidden = !$('#login-panel').hidden;
+  $('#logout').textContent = authenticatedUser ? t('logout') : t('login');
+  $('#logout').setAttribute('aria-label', $('#logout').textContent);
+}
+
 function showLogin(show, error = '') {
   $('#login-panel').hidden = !show;
   $('#app-content').hidden = show;
   document.body.classList.toggle('auth-required', show);
-  $('#logout').hidden = show || !authenticatedUser;
+  updateAuthAction();
   $('#login-error').textContent = error ? t(error) : '';
   if (show) $('#login-username').focus();
 }
@@ -250,6 +258,13 @@ $('#login-form').addEventListener('submit', async (event) => {
 
 $('#logout').addEventListener('click', async () => {
   if (authBusy || busy) return;
+  if (!authenticatedUser) {
+    // La acción visible en modo demo permite entrar al modo API sin buscar el selector.
+    $('#source').value = 'api';
+    $('#mode-description').textContent = t('apiDescription');
+    await load();
+    return;
+  }
   authBusy = true;
   $('#logout').disabled = true;
   try {
@@ -402,6 +417,7 @@ function updateLanguage() {
   render();
   if (lastNotice) notice(lastNotice.key, lastNotice.error, lastNotice.values);
   showFormError(formError);
+  updateAuthAction();
 }
 $('#language').addEventListener('change', updateLanguage);
 applyLanguage();

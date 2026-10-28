@@ -19,6 +19,12 @@ test('idiomas, datos de usuario, estados y errores funcionan sin base ni red', a
     $('#table-dialog').close = () => {};
     await import('../public/app.js');
     const { t } = await import('../public/i18n.js');
+    assert.equal(
+      $('#logout').hidden,
+      false,
+      'la acción de autenticación debe ser visible en modo demo',
+    );
+    assert.equal($('#logout').textContent, t('login'), 'sin sesión debe invitar a iniciar sesión');
     for (const language of ['es', 'en', 'ru']) {
       $('#language').value = language;
       $('#language').dispatchEvent(event('change'));
@@ -87,6 +93,7 @@ test('idiomas, datos de usuario, estados y errores funcionan sin base ni red', a
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal($('#login-panel').hidden, true);
     assert.equal($('#logout').hidden, false);
+    assert.equal($('#logout').textContent, t('logout'));
     $('#logout').dispatchEvent(event('click'));
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal($('#login-panel').hidden, false);
