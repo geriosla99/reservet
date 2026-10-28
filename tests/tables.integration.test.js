@@ -1,56 +1,33 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import pg from 'pg';
-import 'dotenv/config';
+import { integrationSkip, startIntegrationApp, testUrl } from './support/integration.js';
 
-// Estas pruebas usan PostgreSQL real, pero SOLO la base indicada en TEST_DATABASE_URL.
-// Si falta, se omiten con un aviso; en CI (variable CI) su ausencia es un error.
-const testUrl = process.env.TEST_DATABASE_URL;
-if (!testUrl && process.env.CI) throw new Error('TEST_DATABASE_URL es obligatoria en CI.');
-const skip = testUrl ? false : 'Define TEST_DATABASE_URL para ejecutar las pruebas de integración.';
+const skip = integrationSkip();
+const USERNAME = 'tables-test-user';
+const PASSWORD = 'tables-test-password';
 
 describe('API de mesas con PostgreSQL real', { skip }, () => {
-  let server;
-  let base;
-  let pool;
+  let env;
+  let client;
+  let call;
 
   before(async () => {
-    // Protección: nunca se borran datos de una base que no se llame *_test.
-    const databaseName = new URL(testUrl).pathname.slice(1);
-    assert.match(databaseName, /_test$/, 'TEST_DATABASE_URL debe apuntar a una base *_test');
-
-    // La app lee DATABASE_URL al importarse: se redirige a la base de pruebas.
-    process.env.DATABASE_URL = testUrl;
-    execFileSync(process.execPath, ['--import', 'tsx', 'scripts/migrate.ts'], {
-      env: { ...process.env, DATABASE_URL: testUrl },
-      stdio: 'pipe',
-    });
-
-    const { app } = await import('../src/app.ts');
-    ({ pool } = await import('../src/shared/database.ts'));
-    server = app.listen(0, '127.0.0.1');
-    await new Promise((resolve) => server.once('listening', resolve));
-    base = `http://127.0.0.1:${server.address().port}`;
+    env = await startIntegrationApp();
+    await env.createUser(USERNAME, PASSWORD);
+    client = env.createClient();
+    assert.equal((await client.login(USERNAME, PASSWORD)).response.status, 200);
+    call = client.call.bind(client);
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE restaurant_tables RESTART IDENTITY');
+    await env.pool.query('TRUNCATE restaurant_tables RESTART IDENTITY');
   });
 
   after(async () => {
-    await new Promise((resolve) => server.close(resolve));
-    await pool.end();
+    await env.pool.query('DELETE FROM users WHERE username = $1', [USERNAME]);
+    await env.stop();
   });
-
-  async function call(method, path, body) {
-    const response = await fetch(`${base}${path}`, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { response, payload: await response.json() };
-  }
 
   test('lista vacía, crea una mesa disponible y la lista', async () => {
     assert.deepEqual((await call('GET', '/api/tables')).payload, []);
