@@ -3,6 +3,8 @@ import { pool } from './shared/database.js';
 import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import { randomUUID } from 'node:crypto';
+import { HttpError } from './shared/http-error.js';
+import { createTablesRouter } from './modules/tables/tables.routes.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -34,9 +36,17 @@ app.get('/health/db', async (_req, res) => {
   }
 });
 
+app.use('/api/tables', createTablesRouter());
+
 app.use((_req, res) => res.status(404).json({ message: 'Ruta no encontrada' }));
 app.use(
   (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof HttpError) {
+      res
+        .status(error.status)
+        .json({ code: error.code, message: error.message, requestId: res.locals.requestId });
+      return;
+    }
     if (error instanceof SyntaxError && 'body' in error) {
       res
         .status(400)
