@@ -86,6 +86,15 @@ const messages = {
     created: '{name} creada.',
     demoSuffix: ' (Demostración)',
     language: 'Idioma',
+    loginEyebrow: 'ACCESO SEGURO',
+    loginTitle: 'Iniciar sesión',
+    loginDescription: 'Ingresa con el usuario configurado para Reservet.',
+    username: 'Usuario',
+    password: 'Contraseña',
+    login: 'Entrar',
+    logout: 'Cerrar sesión',
+    loginInvalid: 'No se pudo iniciar sesión. Verifica tus credenciales.',
+    sessionRequired: 'Inicia sesión para trabajar con los datos de tu API.',
     tableName: 'Mesa',
     terrace: 'Terraza',
   },
@@ -173,6 +182,15 @@ const messages = {
     created: '{name} created.',
     demoSuffix: ' (Demo)',
     language: 'Language',
+    loginEyebrow: 'SECURE SIGN IN',
+    loginTitle: 'Sign in',
+    loginDescription: 'Sign in with the user configured for Reservet.',
+    username: 'Username',
+    password: 'Password',
+    login: 'Sign in',
+    logout: 'Sign out',
+    loginInvalid: 'Could not sign in. Check your credentials.',
+    sessionRequired: 'Sign in to work with your API data.',
     tableName: 'Table',
     terrace: 'Terrace',
   },
@@ -262,13 +280,22 @@ const messages = {
     created: 'Столик «{name}» создан.',
     demoSuffix: ' (Демонстрация)',
     language: 'Язык',
+    loginEyebrow: 'БЕЗОПАСНЫЙ ВХОД',
+    loginTitle: 'Войти',
+    loginDescription: 'Войдите под пользователем, настроенным для Reservet.',
+    username: 'Имя пользователя',
+    password: 'Пароль',
+    login: 'Войти',
+    logout: 'Выйти',
+    loginInvalid: 'Не удалось войти. Проверьте учетные данные.',
+    sessionRequired: 'Войдите, чтобы работать с данными API.',
     tableName: 'Столик',
     terrace: 'Терраса',
   },
 };
 let language = 'es';
 try {
-  const saved = localStorage.getItem('reservet.lang');
+  const saved = localStorage.getItem('reservet.language');
   if (Object.hasOwn(messages, saved)) language = saved;
 } catch {
   /* Storage may be disabled. */
@@ -289,7 +316,7 @@ const bindings = [
   ['.topbar strong', 'room'],
   ['.workspace>span', 'development'],
   ['.heading .eyebrow', 'operation'],
-  ['h1', 'headline'],
+  ['#app-content h1', 'headline'],
   ['.heading p:last-child', 'subtitle'],
   ['#new-table', 'newTable'],
   ['.connection', 'dataSource', 'aria-label'],
@@ -328,6 +355,13 @@ const bindings = [
   ['#cancel-dialog', 'cancel'],
   ['#language-label', 'language'],
   ['#language', 'language', 'aria-label'],
+  ['#logout', 'logout'],
+  ['#login-eyebrow', 'loginEyebrow'],
+  ['#login-title', 'loginTitle'],
+  ['#login-description', 'loginDescription'],
+  ['#login-username-label', 'username'],
+  ['#login-password-label', 'password'],
+  ['#login-submit', 'login'],
 ];
 export function applyLanguage(next = language) {
   if (!Object.hasOwn(messages, next)) return;

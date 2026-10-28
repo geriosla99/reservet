@@ -3,6 +3,12 @@ import { pool } from './shared/database.js';
 import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import { randomUUID } from 'node:crypto';
+import { HttpError } from './shared/http-error.js';
+import { createTablesRouter } from './modules/tables/tables.routes.js';
+import { createAuthRepository } from './modules/auth/auth.repository.js';
+import { createAuthService } from './modules/auth/auth.service.js';
+import { createAuthRouter } from './modules/auth/auth.routes.js';
+import { createRequireAuth } from './modules/auth/auth.middleware.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -34,9 +40,20 @@ app.get('/health/db', async (_req, res) => {
   }
 });
 
+const authService = createAuthService(createAuthRepository(pool));
+app.use('/api/auth', createAuthRouter(authService));
+// Todo el módulo de mesas exige sesión válida, decidido en el servidor.
+app.use('/api/tables', createRequireAuth(authService), createTablesRouter());
+
 app.use((_req, res) => res.status(404).json({ message: 'Ruta no encontrada' }));
 app.use(
   (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof HttpError) {
+      res
+        .status(error.status)
+        .json({ code: error.code, message: error.message, requestId: res.locals.requestId });
+      return;
+    }
     if (error instanceof SyntaxError && 'body' in error) {
       res
         .status(400)

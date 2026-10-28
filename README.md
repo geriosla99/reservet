@@ -1,55 +1,37 @@
-# Reservet · Prueba técnica junior
+# Reservet · Solución de la prueba técnica
 
-**Español** · [English](README.en.md) · [Русский](README.ru.md)
+Aplicación para personal de restaurante: inicio de sesión, gestión de mesas (listar, crear y
+cambiar estado) y persistencia en PostgreSQL real, con interfaz en español, inglés y ruso.
 
-Completa una aplicación para el personal de un restaurante: **login, gestión de
-mesas y persistencia en PostgreSQL**. Trabaja localmente, publica la solución en
-**tu propio GitHub** y entrega la URL con instrucciones reproducibles.
+> El enunciado original de la prueba está en [`docs/ENUNCIADO_PRUEBA.md`](docs/ENUNCIADO_PRUEBA.md).
+> Este README documenta la solución, cómo ejecutarla y cómo se verificó.
 
-Este README define el alcance obligatorio. El plazo lo comunica el evaluador;
-documenta cualquier tarea incompleta. Las etapas adicionales de las guías no
-forman parte de esta prueba.
+**Estado:** login, logout y consulta de sesión; endpoints de mesas protegidos en el servidor;
+interfaz conectada; 32 pruebas (13 sin base de datos y 19 de integración con PostgreSQL real);
+CI en GitHub. **No se usa Docker.**
 
-## 1. Punto de partida y alcance
+## 1. Requisitos
 
-Incluido: TypeScript/Express, conexión y migraciones PostgreSQL, esquema de mesas,
-interfaz en español/inglés/ruso con modo demo/API y pruebas básicas.
+- Node.js 22.13 o superior (`engines` de `package.json`; desarrollado con Node 24).
+- PostgreSQL instalado localmente (puerto 5432).
+- Windows con PowerShell (los comandos de abajo están escritos para PowerShell).
 
-Debes implementar autenticación, proteger los endpoints de mesas, listar/crear/
-cambiar estados, conectar la interfaz, añadir pruebas y documentar tu solución.
-El login todavía no existe: debes construirlo.
+## 2. Puesta en marcha desde cero
 
-**No se requiere Docker, AWS/SQS, Cloudflare, runner, dominios ni deployment.**
-Tampoco reservas, pagos, inventario o recuperación de contraseña. La infraestructura
-del repositorio original la administra el evaluador, no el candidato.
-
-## 2. Tu repositorio
-
-Crea un repositorio vacío en tu GitHub, sin generar otro README. Conserva el
-historial del proyecto y cambia el destino de tus pushes:
+### 2.1 Dependencias
 
 ```powershell
-git clone https://github.com/Eddierh/reservet.git reservet-prueba
-cd reservet-prueba
-git remote rename origin upstream
-git remote add origin https://github.com/TU_USUARIO/reservet-prueba-tecnica.git
-git push -u origin main
-git switch -c feat/technical-test
+git clone https://github.com/TU_USUARIO/reservet-prueba-tecnica.git
+cd reservet-prueba-tecnica
+git switch feat/technical-test   # o la rama final indicada en la entrega
+npm ci
 ```
 
-Sustituye `TU_USUARIO` y el nombre por los tuyos. Haz commits pequeños en tu rama.
-No envíes cambios ni PR al repositorio original. Si tu repo es privado, concede
-acceso al evaluador antes de entregar.
+### 2.2 PostgreSQL: rol y bases
 
-## 3. Preparación local sin Docker
-
-Instala Git, Node.js **22.13 o superior compatible con las dependencias** y
-PostgreSQL **17** directamente en tu equipo. Comprueba `git --version`,
-`node --version`, `npm --version` y `psql --version`. Si `psql` no está en PATH,
-usa SQL Shell o la herramienta de consultas de pgAdmin.
-
-Conéctate a tu PostgreSQL como administrador y ejecuta estas sentencias **por
-separado**, con autocommit activado; CREATE DATABASE no admite una transacción:
+Ejecuta cada sentencia por separado, como administrador (por ejemplo, en pgAdmin sobre la base
+`postgres`). Comprueba antes si ya existen: no recrees objetos existentes. Usa una contraseña
+local propia en lugar del ejemplo.
 
 ```sql
 CREATE ROLE reservet_candidate LOGIN PASSWORD 'local_candidate_password';
@@ -57,200 +39,232 @@ CREATE DATABASE reservet_candidate OWNER reservet_candidate;
 CREATE DATABASE reservet_candidate_test OWNER reservet_candidate;
 ```
 
-Usa nombres diferentes si ya existen. El usuario de la app no necesita ser
-superusuario. La base `_test` es exclusiva para pruebas. No te conectes a las
-bases dev/pro del proyecto original.
+### 2.3 Variables de entorno
 
-```powershell
-npm ci
-# Solo si aún no existe .env:
-Copy-Item .env.example .env
-```
+Crea un archivo `.env` en la raíz (está en `.gitignore`; nunca se sube) a partir de
+`.env.example`:
 
-Ajusta `.env` a tu instalación:
+| Variable                         | Obligatoria                 | Descripción                                                                                                      |
+| -------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                   | Sí                          | Base de trabajo. Ej.: `postgresql://reservet_candidate:CLAVE@localhost:5432/reservet_candidate`                  |
+| `PORT`                           | No                          | Puerto HTTP (3000 por defecto).                                                                                  |
+| `HOST`                           | No                          | `127.0.0.1` (por defecto) o `0.0.0.0`.                                                                           |
+| `APP_ENV`                        | No                          | `dev` (por defecto) o `pro`. En `pro` la cookie de sesión añade `Secure`.                                        |
+| `TEST_DATABASE_URL`              | Para pruebas de integración | Base de pruebas; su nombre **debe terminar en `_test`**.                                                         |
+| `SEED_USERNAME`, `SEED_PASSWORD` | Solo para `npm run db:seed` | Credenciales del usuario de prueba (8–200 caracteres). Se pasan al ejecutar el comando, no se guardan en `.env`. |
 
-```dotenv
-PORT=3000
-DATABASE_URL=postgresql://reservet_candidate:local_candidate_password@localhost:5432/reservet_candidate
-```
+Una variable ya definida en la sesión de PowerShell **tiene prioridad** sobre `.env`
+(`dotenv` no sobrescribe). Si la app lee un usuario que no esperas, revisa
+`Get-ChildItem Env:DATABASE*`.
 
-El ejemplo original usa **5433** para Docker; una instalación directa suele usar
-**5432**. Usa tu puerto real y codifica los caracteres especiales de la contraseña
-para una URL. No subas `.env` ni credenciales reales.
+### 2.4 Migraciones, usuario de prueba y arranque
 
 ```powershell
 npm run db:migrate
+
+$env:SEED_USERNAME = 'demo'
+$env:SEED_PASSWORD = 'TU_CLAVE_LOCAL'      # elige tu propia clave de prueba
+npm run db:seed
+Remove-Item Env:SEED_USERNAME, Env:SEED_PASSWORD
+
 npm run dev
 ```
 
-Abre **http://localhost:3000** y, en otra terminal, comprueba:
+Comprueba en otra terminal:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/health
-Invoke-RestMethod http://localhost:3000/health/db
+Invoke-RestMethod http://localhost:3000/health      # status: ok
+Invoke-RestMethod http://localhost:3000/health/db   # database: connected
 ```
 
-Espera `status: ok` y `database: connected`. Selecciona **Mi API local** para
-probar tu backend. Inicialmente `/api/tables` devuelve 404: debes implementarlo.
-El modo demo solo guarda en memoria y no demuestra persistencia. No uses
-`npm run db:up` ni `npm run db:down`: son comandos para Docker.
+Abre `http://localhost:3000`, elige **Mi API local** e inicia sesión con el usuario sembrado.
+El modo **Demostración** guarda solo en memoria y no prueba la persistencia.
+`npm run db:seed` es repetible: si el usuario existe, actualiza su contraseña.
+**No uses `npm run db:up` ni `db:down`** (son para Docker).
 
-## 4. Tareas obligatorias
+## 3. Comandos
 
-### A. Autenticación
+| Comando              | Qué hace                                                              |
+| -------------------- | --------------------------------------------------------------------- |
+| `npm run dev`        | Servidor con recarga automática.                                      |
+| `npm run db:migrate` | Aplica migraciones pendientes (cada una en su transacción).           |
+| `npm run db:seed`    | Crea o actualiza el usuario de prueba.                                |
+| `npm test`           | Todas las pruebas (las de integración requieren `TEST_DATABASE_URL`). |
+| `npm run check`      | Lint, formato, tipos, pruebas y compilación.                          |
+| `npm run format`     | Formatea con Prettier.                                                |
 
-- Agrega migraciones de usuarios y un seed o procedimiento repetible para crear
-  un usuario de prueba. No incluyas contraseñas reales en Git.
-- Implementa login, logout y consulta de sesión actual. Puedes elegir sesión o
-  token: explica tu decisión, caducidad y comportamiento de revocación al salir.
-- Guarda contraseñas con scrypt, bcrypt o Argon2; nunca en texto plano ni con
-  SHA-256 simple. Login incorrecto: 401 y mensaje genérico.
-- Protege en el **servidor** todos los endpoints de mesas: sin autenticación deben
-  responder 401. Ocultar botones no es protección suficiente.
-- Crea la pantalla de login y la acción de salir; conserva los tres idiomas y
-  el selector. No se exige registro público, correo ni roles avanzados.
-- Documenta nuevas variables con ejemplos en `.env.example`. Las rutas de salud
-  pueden seguir públicas, sin revelar secretos.
+## 4. API
 
-### B. API de mesas
+Los errores usan `{ code, message, requestId }` (también en la cabecera `X-Request-Id`),
+sin detalles internos ni trazas.
 
-| Método y ruta                  | Entrada                               | Resultado                                |
-| ------------------------------ | ------------------------------------- | ---------------------------------------- |
-| `GET /api/tables`              | Sin cuerpo                            | 200 y array de mesas                     |
-| `POST /api/tables`             | `{ "name": "Mesa 1", "capacity": 4 }` | 201 y mesa creada con estado `available` |
-| `PATCH /api/tables/:id/status` | `{ "status": "occupied" }`            | 200 y mesa completa actualizada          |
+| Método y ruta                  | Auth | Respuestas                                                                         |
+| ------------------------------ | ---- | ---------------------------------------------------------------------------------- |
+| `POST /api/auth/login`         | No   | 200 `{ user }` + cookie · 400 `VALIDATION_ERROR` · 401 `INVALID_CREDENTIALS`       |
+| `POST /api/auth/logout`        | No   | 204 y cookie expirada; revoca la sesión en el servidor                             |
+| `GET /api/auth/session`        | Sí   | 200 `{ user }` · 401 `UNAUTHENTICATED`                                             |
+| `GET /api/tables`              | Sí   | 200 lista de mesas ordenada por `id`                                               |
+| `POST /api/tables`             | Sí   | 201 mesa creada (`available`) · 400 `VALIDATION_ERROR` · 409 `TABLE_NAME_CONFLICT` |
+| `PATCH /api/tables/:id/status` | Sí   | 200 mesa actualizada · 400 `VALIDATION_ERROR` · 404 `TABLE_NOT_FOUND`              |
 
-Cada mesa incluye `id` entero positivo, `name`, `capacity` entera y `status`.
-Valida nombre no vacío de hasta 80 caracteres, capacidad de **1 a 20**, ID
-positivo y estados `available`, `occupied`, `out_of_service`.
+Reglas: nombre de 1 a 80 caracteres (se recortan espacios), capacidad **entera de 1 a 20**
+(se rechaza `"4"` como texto y `2.5`), estado `available`, `occupied` u `out_of_service`,
+`id` entero positivo que quepa en un `integer` de PostgreSQL. `/health` y `/health/db` son públicos.
 
-Datos inválidos: **400**; mesa inexistente: **404**; nombre duplicado: **409**;
-sin autenticación: **401**. Usa SQL parametrizado y restricciones de base de datos.
-No devuelvas consultas, contraseñas ni stacks al cliente.
-
-### C. Arquitectura e interfaz
-
-- Divide el módulo en rutas, servicio y repositorio; separa HTTP, negocio y SQL.
-- Agrega migraciones nuevas, sin modificar las ya aplicadas. La solución debe
-  funcionar con una base vacía y los comandos documentados, sin cambios ocultos.
-- Conecta el listado, formulario, filtros y cambio de estado de la interfaz.
-  Muestra carga y errores, evita envíos repetidos e inserta texto externo de
-  forma segura. Valida en servidor aunque el navegador ya valide.
-- Comprueba que las mesas del modo API sobreviven a recargar y reiniciar el
-  servidor. El modo demo no debe ocultar errores de tu backend.
-- Si usas cookies, conserva el mismo origen y documenta sus opciones de seguridad.
-- La búsqueda debe ignorar mayúsculas/minúsculas y el idioma elegido debe
-  conservarse al recargar.
-
-### D. Pruebas y calidad
-
-Incluye pruebas de login correcto/incorrecto, acceso sin sesión, logout según tu
-mecanismo, crear/listar/cambiar estado, validaciones, duplicados y mesa inexistente.
-Comprueba persistencia contra la base `_test`, nunca borrando datos de trabajo.
-
-Las pruebas incluidas usan mocks/JSDOM y no cubren tu backend de negocio.
-Documenta cómo configurar y migrar la base de pruebas, sus comandos y qué está
-simulado. Si necesitas `TEST_DATABASE_URL`, explícalo y prepara una base temporal
-para las pruebas de integración en tu CI. No desactives comprobaciones existentes.
-
-```powershell
-npm run format
-npm run check
-```
-
-`check` ejecuta lint, formato, tipos, pruebas y compilación. **Verificaciones** debe
-pasar en tu GitHub. El deployment está reservado al repositorio original y se
-omite en las copias: no necesitas instalar un runner.
-
-## 5. Orden de trabajo y publicación
-
-1. Prepara PostgreSQL y comprueba `/health/db`.
-2. Implementa y prueba mesas en tu rama.
-3. Agrega usuarios, seed, login y protección del módulo.
-4. Conecta la interfaz, verifica los tres idiomas y completa pruebas.
-5. Ejecuta las verificaciones y prueba tus instrucciones desde cero.
-6. Sube tu rama, abre un PR **en tu propio repo**, revísalo e intégralo a su rama
-   por defecto para que la solución final sea fácil de encontrar.
-
-```powershell
-git add <archivos-de-tu-cambio>
-git commit -m "feat: describe el cambio implementado"
-git push -u origin feat/technical-test
-```
-
-## 6. Evaluación
-
-### Uso de IA y explicación de la entrega
-
-- **Puedes usar IA para programar, investigar, depurar y escribir pruebas.**
-  Indica las herramientas utilizadas y en qué partes te ayudaron.
-- Eres responsable de comprender, revisar y verificar todo el código entregado,
-  también el generado. No compartas secretos ni datos personales con herramientas.
-- Incluye una explicación escrita del flujo login → petición autenticada →
-  servicio → PostgreSQL, de tus decisiones y de cómo verificaste el resultado.
-- Describe una sugerencia de IA que corregiste o descartaste y por qué. Si no
-  ocurrió, explica una decisión que contrastaste con documentación o pruebas.
-- No pedimos el historial completo de conversaciones. Un vídeo explicativo es
-  opcional; **no habrá ejercicios de programación ni cambios en vivo con el evaluador**.
-
-### Revisión del código inicial
-
-El código entregado es un punto de partida y puede contener defectos funcionales.
-Revisarlo y corregir lo que detectes forma parte de la prueba. Las comprobaciones
-incluidas no garantizan que todos los comportamientos sean correctos: amplía las
-pruebas sin desactivar las existentes.
-
-No te limites al caso feliz: revisa límites, errores y comportamientos después de
-recargar. Para cada problema encontrado, documenta **síntoma, reproducción, causa,
-corrección y prueba de regresión**.
-No basta con afirmar que una IA lo arregló: explica la causa y la evidencia.
-
-### Criterios
-
-| Criterio       | Evidencia                                                                   |
-| -------------- | --------------------------------------------------------------------------- |
-| Funcionamiento | Login y mesas con PostgreSQL real                                           |
-| Diseño         | Responsabilidades claras y decisiones explicadas                            |
-| Seguridad      | Hash de contraseñas, protección del backend, validación y SQL parametrizado |
-| Pruebas        | Casos correctos, errores y persistencia reproducibles                       |
-| Entrega        | Commits comprensibles, CI correcta e instrucciones completas                |
-
-Debes poder explicar tu código y las herramientas o ayudas utilizadas. Reservas,
-SQS, microservicios y deployment no son requisitos ni sustituyen tareas obligatorias.
-
-## 7. Entrega al evaluador
-
-Envía por el mismo canal en que recibiste la prueba:
-
-- **URL de tu repositorio**, accesible al evaluador, rama final y SHA a revisar.
-- URL del PR de tu repo y de una ejecución correcta de CI.
-- Un README con instalación, PostgreSQL, variables, migraciones, seed, arranque
-  y comandos para todas las pruebas.
-- Credenciales **solo de demostración local**, o el procedimiento para generarlas;
-  nunca claves personales ni secretos de otros ambientes.
-- Decisiones, pendientes y limitaciones. Capturas o vídeo son opcionales y no
-  sustituyen código e instrucciones.
-- Una sección de uso de IA y un registro de problemas encontrados con su explicación
-  y las pruebas que añadiste.
+## 5. Arquitectura y flujo
 
 ```text
-Repositorio: https://github.com/TU_USUARIO/reservet-prueba-tecnica
-Rama final y commit:
-Pull request:
-CI:
-Instrucciones de ejecución: sección de mi README
-Usuario de prueba: procedimiento de seed documentado
-Completado / pendiente:
+Navegador ── POST /api/auth/login ──► auth.routes ► auth.service ► auth.repository ► users
+              ◄── Set-Cookie: reservet_session (HttpOnly, SameSite=Strict) ── sessions (hash del token)
+
+Navegador ── GET /api/tables + cookie ──► requireAuth ──► tables.routes
+                                              │  auth.service.getSession ► sessions JOIN users
+                                              ▼  (401 si no hay sesión válida)
+                              tables.service (validación) ► tables.repository (SQL parametrizado) ► restaurant_tables
 ```
 
-Antes de entregar, clona tu repo en otra carpeta y sigue tus propias instrucciones.
-La revisión no debe depender de tu `.env`, archivos fuera del repo o acceso a nuestra PC.
+Responsabilidades: **rutas** (HTTP), **servicio** (reglas y validación, errores `HttpError`),
+**repositorio** (SQL parametrizado, sin lógica de negocio), **middleware** (autenticación).
+`src/modules/auth` y `src/modules/tables` siguen la misma estructura.
 
-## Referencias y administración
+## 6. Decisiones técnicas y seguridad
 
-[Arquitectura](docs/ARQUITECTURA.md) · [Contribución](CONTRIBUTING.md) ·
-[Guía de aprendizaje](docs/GUIA_JUNIOR.md).
-Las etapas de reservas/SQS son formación futura. Algunas guías históricas usan
-Docker: para esta prueba sigue la preparación local de este README.
-La [guía de deployment para tus proyectos](docs/DEPLOYMENT.md) es aprendizaje
-opcional: usa tus propios recursos y no forma parte de la entrega.
+- **Sesión con cookie, no JWT.** El cierre de sesión borra la fila en el servidor y la cookie
+  deja de servir al instante. Con JWT habría que mantener una lista de bloqueo. Cookie
+  `HttpOnly` (no legible por JavaScript), `SameSite=Strict` (no se envía desde otros sitios:
+  mitiga CSRF), `Path=/`, `Max-Age=28800` y `Secure` cuando `APP_ENV=pro`.
+- **Caducidad absoluta de 8 horas** desde el login; las sesiones vencidas se eliminan al iniciar sesión.
+- **Solo se guarda el hash SHA-256 del token** de sesión: una fuga de la base no entrega sesiones válidas.
+- **Contraseñas con scrypt** (módulo `node:crypto`, sin dependencias nuevas): sal aleatoria de
+  16 bytes y N=2^16, r=8, p=2, un coste equivalente al mínimo que indica OWASP
+  (N=2^17, r=8, p=1). Los parámetros se guardan dentro del hash
+  (`scrypt$N$r$p$sal$hash`), por lo que pueden subirse sin invalidar los existentes. La
+  comparación usa `timingSafeEqual`.
+- **Credenciales sin pistas:** usuario inexistente y contraseña incorrecta devuelven el mismo
+  401 y mensaje; cuando el usuario no existe se verifica igualmente contra un hash falso para
+  igualar el tiempo de respuesta. Longitud máxima de contraseña (200) contra abuso de CPU.
+- **Nombre de usuario sin distinguir mayúsculas** (índice único sobre `lower(username)`).
+- **SQL parametrizado** en todas las consultas; el nombre de mesa `x'); DROP TABLE ...` se guarda como texto (hay prueba).
+- **Protección en el servidor:** todo `/api/tables` pasa por `requireAuth`. Ocultar botones en la interfaz no es seguridad.
+- **Sin credenciales en Git:** el seed lee variables de entorno; `.env` está ignorado.
+
+## 7. Pruebas
+
+```powershell
+$env:TEST_DATABASE_URL = 'postgresql://reservet_candidate:CLAVE@localhost:5432/reservet_candidate_test'
+npm test
+npm run check
+Remove-Item Env:TEST_DATABASE_URL     # o déjala en .env
+```
+
+| Tipo                          | Archivos                                                      | Qué cubre                                                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integración (PostgreSQL real) | `auth.integration.test.js`, `tables.integration.test.js`      | Login correcto/incorrecto, acceso sin sesión, cookie inventada, sesión caducada, logout que revoca, crear/listar/cambiar estado, validaciones y límites, duplicados, 404, persistencia vista desde otra conexión, SQL parametrizado |
+| Unitarias                     | `password.test.js`, `config.test.js`, `http.test.js`          | scrypt (sal única, hashes antiguos, hashes alterados), configuración, JSON inválido y cuerpos grandes                                                                                                                               |
+| Interfaz (JSDOM, sin red)     | `ui.test.js`, `ui-search.test.js`, `i18n-persistence.test.js` | Tres idiomas, XSS en nombres, login/logout, regresiones de los defectos                                                                                                                                                             |
+
+Las pruebas de integración **arrancan la aplicación real** y usan solo la base de
+`TEST_DATABASE_URL`: se niegan a ejecutarse si su nombre no termina en `_test`, aplican las
+migraciones y vacían únicamente `restaurant_tables` y sus propios usuarios. Sin la variable
+se omiten con un aviso; **en CI su ausencia es un error**. Lo simulado: la interfaz usa JSDOM
+y un `fetch` falso; no hay navegador real.
+
+**CI** (`.github/workflows/ci.yml`, «Verificaciones»): `npm ci` y `npm run check` con un
+contenedor PostgreSQL 17 desechable. El workflow de despliegue se omite fuera del repositorio original.
+
+## 8. Defectos del código inicial
+
+El código inicial era un punto de partida con defectos en la interfaz. Se revisó también el
+servidor (migración, configuración, errores, apagado) y no se encontraron defectos adicionales.
+
+### D1. No se podía crear una mesa con capacidad 20
+
+- **Síntoma:** el formulario mostraba «Escribe un nombre… entre 1 y 20» al crear una mesa de 20 personas.
+- **Reproducción:** modo Demostración → Nueva mesa → capacidad 20 → Crear.
+- **Causa:** `public/app.js` validaba `capacity >= 20` en lugar de `capacity > 20`; el rango válido (README, migración, servidor) es 1–20.
+- **Corrección:** comparación `> 20`.
+- **Prueba de regresión:** `tests/ui.test.js` (crea una mesa de 20) y `tests/tables.integration.test.js` (límites 1 y 20 en la API).
+
+### D2. La búsqueda distinguía mayúsculas y minúsculas
+
+- **Síntoma:** buscar «Terraza» no devolvía mesas, pero «terraza» sí.
+- **Reproducción:** escribir `Terraza` en «Buscar por nombre».
+- **Causa:** el nombre de la mesa se pasaba a minúsculas, pero el texto buscado no.
+- **Corrección:** `toLocaleLowerCase(locale())` también sobre el texto buscado.
+- **Prueba de regresión:** `tests/ui-search.test.js` (`terraza`, `Terraza`, `TERRAZA`). Falla si se reintroduce el defecto.
+
+### D3. El idioma elegido no se conservaba al recargar
+
+- **Síntoma:** tras elegir inglés o ruso y recargar, la interfaz volvía a español.
+- **Reproducción:** cambiar el idioma y pulsar F5.
+- **Causa:** `public/i18n.js` guardaba la preferencia en `reservet.language` pero la leía de `reservet.lang`.
+- **Corrección:** ambas operaciones usan `reservet.language`.
+- **Prueba de regresión:** `tests/i18n-persistence.test.js`. Falla si se reintroduce el defecto.
+
+### Problemas de entorno resueltos durante el trabajo (no son del código inicial)
+
+- `28P01` en `npm run db:migrate`: el `.env` guardado en disco usaba el rol `reservet`, que no existía en PostgreSQL local. Se alineó con el rol `reservet_candidate` y sus bases. Lección: `dotenv` no sobrescribe variables ya definidas en la sesión.
+
+## 9. Uso de IA
+
+Herramientas utilizadas: **Claude (Anthropic)** y **ChatGPT (OpenAI)**. [COMPLETAR: confirma o ajusta esta lista con lo que realmente usaste.]
+
+- **Claude:** diagnóstico de la conexión a PostgreSQL, módulo de mesas, autenticación (scrypt, sesiones, seed), pruebas de integración, workflow de CI y borrador de esta documentación.
+- **ChatGPT:** revisión de cambios y propuestas de interfaz y pruebas, incluida la integración del login en el frontend.
+- Todo el código se ejecutó y verificó localmente (`npm run check`) y en el CI de GitHub, y se revisó antes de confirmarlo.
+
+**Sugerencia de IA corregida:** el código de contraseñas generado con IA declaraba que sus
+parámetros de scrypt (N=2^14, r=8, p=1) eran «los recomendados por OWASP». Al contrastarlo con la guía de OWASP resultó
+que estaban por debajo del mínimo (N=2^17, r=8, p=1, o un coste equivalente). Se subió a N=2^16, r=8, p=2, se midió el coste
+(~0,3 s y ~64 MiB por hash), se añadió una prueba que fija los parámetros nuevos y otra que garantiza que los
+hashes antiguos siguen verificándose.
+
+**Cambios de diagnóstico descartados:** una sesión de depuración con IA dejó sin confirmar cambios en
+`scripts/migrate.ts` (impresión completa de errores) y en `.env.example` (otra contraseña y puerto). Se
+revisaron y se revirtieron con `git restore` antes de confirmar, porque mostraban más detalle del necesario y alteraban un archivo
+que se publica. [COMPLETAR: confirma que esto coincide con lo ocurrido.]
+
+## 10. Limitaciones y pendientes
+
+- **Sin límite de intentos de login** (rate limiting): un atacante podría probar contraseñas; en producción haría falta limitarlos por IP/usuario.
+- **Coste de scrypt por login:** ~64 MiB y ~0,3 s por intento; muchos logins simultáneos consumen memoria.
+- **Sin protección CSRF con token:** se apoya en `SameSite=Strict` y en que la API usa JSON; no hay token anti-CSRF.
+- **Logout en la interfaz:** si la petición de cierre falla (por ejemplo, sin red), la interfaz muestra la sesión como cerrada aunque la cookie siga válida en el servidor hasta que caduque (8 h).
+- **Una sola cuenta de prueba por seed:** no hay registro, roles ni recuperación de contraseña (fuera de alcance).
+- **Sin pruebas en navegador real** (solo JSDOM).
+- `README.en.md` y `README.ru.md` conservan el enunciado original y no se actualizaron.
+
+## 11. Verificación desde cero (checklist)
+
+1. Clonar el repositorio en otra carpeta y seguir las secciones 2.1–2.4.
+2. `npm run check` pasa con `TEST_DATABASE_URL` definida.
+3. En `http://localhost:3000` → **Mi API local** → iniciar sesión, crear una mesa, cambiar su estado.
+4. Recargar y detener/reiniciar `npm run dev`: la mesa y su estado persisten.
+5. Cerrar sesión: `Invoke-RestMethod http://localhost:3000/api/tables` responde 401.
+6. `git ls-files .env` no imprime nada; `git diff --check` sin errores.
+
+## 12. Entrega
+
+```text
+Repositorio: https://github.com/geriosla99/reservet/edit/feat/technical-test
+Rama final y commit: feat/technical-test docs: README de la solución y regresiones de defectos; corrige parámetros de scrypt
+Pull request: https://github.com/geriosla99/reservet/pull/1
+CI: https://github.com/geriosla99/reservet/actions/runs/40685099116
+Instrucciones de ejecución: secciones 2 y 11 de este README
+Usuario de prueba: procedimiento de seed (sección 2.4)
+Completado / pendiente: ver secciones 8 y 10
+```
+
+### Problemas de entorno resueltos durante el trabajo (no son del código inicial)
+
+Durante la configuración local de PostgreSQL se presentaron varios problemas de conexión que se resolvieron antes de continuar con las pruebas de la aplicación.
+
+- **`psql` no se reconocía en PowerShell:** el comando no estaba disponible desde la terminal porque el ejecutable de PostgreSQL no estaba agregado al `PATH`. Se continuó la configuración utilizando pgAdmin y las herramientas del proyecto.
+- **`ECONNREFUSED`:** la aplicación intentaba conectarse a PostgreSQL en un puerto distinto al utilizado por la instalación local. Se verificó que PostgreSQL estaba escuchando en el puerto `5432` y se ajustó la configuración.
+- **`28P01` — autenticación fallida:** el archivo `.env` tenía configurado el rol `reservet`, que no existía en la instancia local. En pgAdmin se comprobó que el rol disponible era `reservet_candidate`; se configuró su contraseña y se alinearon las credenciales de conexión.
+- **Variables de entorno con prioridad sobre `.env`:** aunque se modificó el archivo, la aplicación continuaba utilizando valores anteriores porque `dotenv` no sobrescribe variables ya definidas en la sesión de PowerShell. Se revisaron las variables con `Get-ChildItem Env:DATABASE*` y se corrigió la configuración efectiva.
+- **Bases de datos de trabajo y pruebas:** se configuraron `reservet_candidate` y `reservet_candidate_test`, separando la base utilizada por la aplicación de la destinada a las pruebas de integración.
+
+Una vez corregida la configuración, `npm run db:migrate` se ejecutó correctamente. También se iniciaron el servidor y los endpoints de comprobación: `/health` respondió correctamente y `/health/db` confirmó la conexión con PostgreSQL.
+
+**Resultado:** la aplicación quedó conectada a PostgreSQL local, con las migraciones aplicadas y la base de pruebas configurada. Estos inconvenientes correspondieron al entorno local, no a defectos funcionales del código de la prueba.
