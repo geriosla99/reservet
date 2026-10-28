@@ -70,6 +70,8 @@ let demoTables = [
 let tables = [];
 let busy = false;
 let loadError = '';
+let authenticatedUser = null;
+let authBusy = false;
 const isDemo = () => $('#source').value === 'demo';
 const notice = (key = '', error = false, values = {}) => {
   lastNotice = { key, error, values };
@@ -83,13 +85,16 @@ async function request(path, options = {}) {
     response = await fetch(path, {
       ...options,
       signal: AbortSignal.timeout(10000),
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
   } catch {
     throw translatedError('connectionError');
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    if (response.status === 401)
+      throw Object.assign(translatedError('sessionRequired'), { status: 401 });
     if (response.status === 404) throw translatedError('notFound', { path });
     throw translatedError(response.status === 409 ? 'duplicate' : 'httpError', {
       status: response.status,
@@ -138,7 +143,7 @@ function render() {
   $('#total').textContent = tables.length;
   for (const status of statuses)
     $(`#${status}`).textContent = tables.filter((table) => table.status === status).length;
-  const query = $('#search').value.trim();
+  const query = $('#search').value.trim().toLocaleLowerCase(locale());
   const filtered = tables.filter(
     (table) =>
       displayName(table).toLocaleLowerCase(locale()).includes(query) &&
@@ -184,8 +189,91 @@ function render() {
   }
 }
 
+function showLogin(show, error = '') {
+  $('#login-panel').hidden = !show;
+  $('#app-content').hidden = show;
+  document.body.classList.toggle('auth-required', show);
+  $('#logout').hidden = show || !authenticatedUser;
+  $('#login-error').textContent = error ? t(error) : '';
+  if (show) $('#login-username').focus();
+}
+
+async function checkSession() {
+  try {
+    const result = await request('/api/auth/session');
+    authenticatedUser = result?.user ?? null;
+    if (!authenticatedUser) throw translatedError('sessionRequired');
+    showLogin(false);
+    return true;
+  } catch (error) {
+    authenticatedUser = null;
+    showLogin(true);
+    if (error.status !== 401) {
+      $('#login-error').textContent = error.key ? t(error.key, error.values) : t('connectionError');
+    }
+    return false;
+  }
+}
+
+$('#login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (authBusy) return;
+  const username = $('#login-username').value.trim();
+  const password = $('#login-password').value;
+  if (!username || !password) {
+    $('#login-error').textContent = t('loginInvalid');
+    return;
+  }
+  authBusy = true;
+  $('#login-submit').disabled = true;
+  $('#login-submit').textContent = t('saving');
+  $('#login-error').textContent = '';
+  try {
+    const result = await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    authenticatedUser = result?.user ?? null;
+    if (!authenticatedUser) throw translatedError('loginInvalid');
+    $('#login-password').value = '';
+    showLogin(false);
+    await load();
+  } catch (error) {
+    authenticatedUser = null;
+    showLogin(true, error.key === 'sessionRequired' ? 'loginInvalid' : error.key || 'loginInvalid');
+  } finally {
+    authBusy = false;
+    $('#login-submit').disabled = false;
+    $('#login-submit').textContent = t('login');
+  }
+});
+
+$('#logout').addEventListener('click', async () => {
+  if (authBusy || busy) return;
+  authBusy = true;
+  $('#logout').disabled = true;
+  try {
+    await request('/api/auth/logout', { method: 'POST' });
+  } catch {
+    // Aunque falle la petición, la interfaz elimina el estado local y exige autenticar de nuevo.
+  } finally {
+    authenticatedUser = null;
+    $('#logout').disabled = false;
+    authBusy = false;
+    $('#source').value = 'api';
+    showLogin(true);
+    tables = [];
+    render();
+    notice('sessionRequired', true);
+  }
+});
+
 async function load() {
   if (busy) return;
+  if (!isDemo() && !authenticatedUser) {
+    const hasSession = await checkSession();
+    if (!hasSession) return;
+  }
   loadError = '';
   tables = [];
   setBusy(true);
@@ -237,6 +325,10 @@ async function changeStatus(table, status) {
 }
 
 $('#new-table').addEventListener('click', () => {
+  if (!isDemo() && !authenticatedUser) {
+    void checkSession();
+    return;
+  }
   $('#table-form').reset();
   showFormError();
   $('#table-dialog').showModal();
@@ -253,7 +345,7 @@ $('#table-form').addEventListener('submit', async (event) => {
   const name = $('#table-name').value.trim();
   const capacity = Number($('#table-capacity').value);
   showFormError();
-  if (!name || name.length > 80 || !Number.isInteger(capacity) || capacity < 1 || capacity >= 20) {
+  if (!name || name.length > 80 || !Number.isInteger(capacity) || capacity < 1 || capacity > 20) {
     showFormError(translatedError('validation'));
     return;
   }
@@ -291,6 +383,10 @@ $('#table-form').addEventListener('submit', async (event) => {
   }
 });
 $('#source').addEventListener('change', () => {
+  if (isDemo()) {
+    showLogin(false);
+    authenticatedUser = null;
+  }
   $('#mode-description').textContent = t(isDemo() ? 'demoDescription' : 'apiDescription');
   void load();
 });

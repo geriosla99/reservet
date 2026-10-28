@@ -654,3 +654,45 @@ form input {
     transition: none !important;
   }
 }
+
+/* Authentication flow */
+[hidden] {
+  display: none !important;
+}
+.login-panel {
+  min-height: calc(100vh - 130px);
+  display: grid;
+  place-items: center;
+  padding: 36px 0;
+}
+.login-card {
+  width: min(100%, 430px);
+  padding: 34px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgb(38 59 52 / 7%);
+}
+.login-card h1 {
+  font-size: 30px;
+}
+.login-card > p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 13px;
+}
+#login-form {
+  margin-top: 20px;
+}
+#login-submit {
+  width: 100%;
+  margin-top: 12px;
+}
+body.auth-required .sidebar {
+  display: none;
+}
+body.auth-required main {
+  margin-left: 0;
+  width: 100%;
+  max-width: none;
+  padding: 0 clamp(20px, 6vw, 90px);
+}
